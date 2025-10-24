@@ -13,8 +13,15 @@ def main():
     # ===============================
     # 1. Argumentos de línea de comando
     # ===============================
-    parser = argparse.ArgumentParser(description="Entrenamiento de modelo con MLflow")
-    parser.add_argument("--config", type=str, default="config.yaml", help="Ruta al archivo de configuración YAML")
+    parser = argparse.ArgumentParser(
+        description="Entrenamiento de modelo con MLflow"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Ruta al archivo de configuración YAML",
+    )
     args = parser.parse_args()
 
     # ===============================
@@ -59,8 +66,8 @@ def main():
     # ===============================
     # 6. Configurar MLflow y registrar
     # ===============================
-    mlflow.set_tracking_uri("file:./mlruns")  # Guarda localmente
-    mlflow.set_experiment("default")  # Crea experimento si no existe
+    mlflow.set_tracking_uri("file:./mlruns")
+    mlflow.set_experiment("default")
 
     with mlflow.start_run():
         mlflow.log_param("model_type", model_type)
