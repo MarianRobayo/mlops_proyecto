@@ -1,9 +1,11 @@
 import pandas as pd
 
+
 def load_data(data_path):
     """Carga los datos desde un archivo CSV."""
     data = pd.read_csv(data_path)
     return data
+
 
 def fill_missing(data, method="mean"):
     """Rellena valores nulos según el método indicado."""
