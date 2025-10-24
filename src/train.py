@@ -1,74 +1,78 @@
 import os
-import argparse
 import yaml
-import mlflow
-import mlflow.sklearn
-from mlflow.models.signature import infer_signature
-import numpy as np
-import joblib
+import pandas as pd
+from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, f1_score
-from src.utils import load_data, preprocess, split_and_scale
+import mlflow
+import mlflow.sklearn
 
-def main(config_path: str):
-    with open(config_path, "r") as f:
-        cfg = yaml.safe_load(f)
 
-    data_path = cfg["data"]["path"]
-    test_size = cfg["data"].get("test_size", 0.2)
-    random_state = cfg["data"].get("random_state", 42)
+def load_config(config_path="config.yaml"):
+    """Carga el archivo de configuración YAML."""
+    with open(config_path, "r") as file:
+        config = yaml.safe_load(file)
+    return config
 
-    mlflow_dir = cfg["mlflow"]["tracking_dir"]
-    tracking_uri = f"file://{os.path.abspath(mlflow_dir)}"
-    mlflow.set_tracking_uri(tracking_uri)
-    os.makedirs(mlflow_dir, exist_ok=True)
 
-    df = load_data(data_path)
-    X, y = preprocess(df)
-    X_train, X_test, y_train, y_test, scaler = split_and_scale(
+def load_data(data_path):
+    """Carga los datos desde un archivo CSV."""
+    data = pd.read_csv(data_path)
+    return data
+
+
+def preprocess_data(data, target_column):
+    """Divide los datos en características y variable objetivo."""
+    X = data.drop(columns=[target_column])
+    y = data[target_column]
+    return X, y
+
+
+def train_model(X_train, y_train, params):
+    """Entrena un modelo RandomForest con los parámetros especificados."""
+    model = RandomForestClassifier(**params)
+    model.fit(X_train, y_train)
+    return model
+
+
+def evaluate_model(model, X_test, y_test):
+    """Evalúa el modelo usando Accuracy y F1 Score."""
+    preds = model.predict(X_test)
+    acc = accuracy_score(y_test, preds)
+    f1 = f1_score(y_test, preds, average="weighted")
+    return acc, f1
+
+
+def main():
+    """Pipeline principal de entrenamiento."""
+    config = load_config()
+
+    data_path = config["data_path"]
+    target_column = config["target_column"]
+    test_size = config["test_size"]
+    random_state = config["random_state"]
+    model_params = config["model_params"]
+
+    data = load_data(data_path)
+    X, y = preprocess_data(data, target_column)
+
+    X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state
     )
 
-    model_cfg = cfg.get("model", {})
-    n_estimators = model_cfg.get("n_estimators", 100)
-    max_depth = model_cfg.get("max_depth", None)
+    with mlflow.start_run():
+        mlflow.log_params(model_params)
+        model = train_model(X_train, y_train, model_params)
+        acc, f1 = evaluate_model(model, X_test, y_test)
 
-    with mlflow.start_run() as run:
-        model = RandomForestClassifier(
-            n_estimators=n_estimators, max_depth=max_depth, random_state=random_state
-        )
-        model.fit(X_train, y_train)
+        mlflow.log_metric("accuracy", acc)
+        mlflow.log_metric("f1_score", f1)
 
-        preds = model.predict(X_test)
-        acc = accuracy_score(y_test, preds)
-        f1 = f1_score(y_test, preds)
+        mlflow.sklearn.log_model(model, "model")
 
-        mlflow.log_param("n_estimators", n_estimators)
-        mlflow.log_param("max_depth", max_depth)
-        mlflow.log_metric("accuracy", float(acc))
-        mlflow.log_metric("f1", float(f1))
+        print(f"Accuracy: {acc:.4f}")
+        print(f"F1 Score: {f1:.4f}")
 
-        example_input = X_test[:2].tolist() if hasattr(X_test, 'tolist') else X_test[:2]
-        signature = infer_signature(X_train, model.predict(X_train))
-
-        mlflow.sklearn.log_model(
-            sk_model=model,
-            artifact_path="model",
-            signature=signature,
-            input_example=example_input
-        )
-
-        os.makedirs("artifacts", exist_ok=True)
-        scaler_path = os.path.join("artifacts", "scaler.joblib")
-        joblib.dump(scaler, scaler_path)
-        mlflow.log_artifact(scaler_path, artifact_path="preprocessing")
-
-        run_id = run.info.run_id
-        print(f"MLflow run_id: {run_id}")
-        print(f"MLflow tracking URI: {mlflow.get_tracking_uri()}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config YAML")
-    args = parser.parse_args()
-    main(args.config)
+    main()
