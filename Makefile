@@ -8,7 +8,7 @@ train:
 	python -m src.train --config config.yaml
 
 test:
-	pytest -q
+	PYTHONPATH=. pytest -q
 
 lint:
 	flake8 src tests
