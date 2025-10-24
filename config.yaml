@@ -2,12 +2,13 @@ data:
 data_path: data/winequality-red.csv
 target_column: quality
 
+# Parámetros del modelo
 model:
   type: RandomForestRegressor
   n_estimators: 100
-  max_depth: 8
+  max_depth: 5
   random_state: 42
 
-split:
-  test_size: 0.2
-  random_state: 42
+# Parámetros de división
+test_size: 0.2
+random_state: 42
