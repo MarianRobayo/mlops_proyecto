@@ -1,0 +1,70 @@
+name: ML Pipeline CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  ml_pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Lint
+        run: make lint
+
+      - name: Run tests
+        run: make test
+
+      - name: Train model
+        env:
+          MLFLOW_TRACKING_DIR: mlruns
+        run: |
+          mkdir -p mlruns
+          make train
+
+      - name: List mlruns (for debug)
+        run: ls -la mlruns || true
+
+      - name: Upload mlruns artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlruns
+          path: mlruns
+
+      - name: Upload model artifact (model logged by MLflow)
+        run: |
+          MODEL_PATH=$(find mlruns -type d -path "*/artifacts/model" -print -quit || true)
+          echo "Found model path: $MODEL_PATH"
+          if [ -n "$MODEL_PATH" ]; then
+            tar -czf model_artifact.tar.gz -C "$MODEL_PATH" .
+            echo "Uploading model_artifact.tar.gz"
+          else
+            echo "No model artifacts found"
+          fi
+
+      - name: Upload model tar (if exists)
+        uses: actions/upload-artifact@v4
+        with:
+          name: model_artifact
+          path: model_artifact.tar.gz
