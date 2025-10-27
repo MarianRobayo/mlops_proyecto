@@ -1,6 +1,7 @@
 import os
 from src.utils import load_data, preprocess
 
+
 def test_load_and_preprocess():
     path = "data/winequality-red.csv"
     assert os.path.exists(path)
