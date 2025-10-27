@@ -8,10 +8,10 @@ train:
 	python -m src.train --config config.yaml
 
 test:
-	PYTHONPATH=. pytest -q
+	pytest -q
 
 lint:
 	flake8 src tests
 
 clean:
-	rm -rf mlruns/ artifacts/ __pycache__
+	rm -rf mlruns/ artifacts/ __pycache__ 
