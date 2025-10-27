@@ -2,85 +2,86 @@ import argparse
 import yaml
 import mlflow
 import mlflow.sklearn
-from mlflow.models.signature import infer_signature
-import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, f1_score
-from utils import load_data, preprocess, split_and_scale
+from sklearn.metrics import accuracy_score
+from src.utils import load_data, preprocess_data
 
-def main(config_path: str):
-    # Load config
-    with open(config_path, "r") as f:
-        cfg = yaml.safe_load(f)
 
-    data_path = cfg["data"]["path"]
-    test_size = cfg["data"].get("test_size", 0.2)
-    random_state = cfg["data"].get("random_state", 42)
+def main():
+    """Entrena un modelo supervisado y registra métricas en MLflow."""
 
-    mlflow_dir = cfg["mlflow"]["tracking_dir"]
-    # Ensure absolute file URI for MLflow (works local & CI)
-    tracking_uri = f"file://{os.path.abspath(mlflow_dir)}"
-    mlflow.set_tracking_uri(tracking_uri)
+    # -------------------------------
+    # 1. Argumentos de línea de comando
+    # -------------------------------
+    parser = argparse.ArgumentParser(
+        description="Entrenamiento de modelo con MLflow"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Ruta al archivo de configuración YAML",
+    )
+    args = parser.parse_args()
 
-    # Ensure mlruns dir exists
-    os.makedirs(mlflow_dir, exist_ok=True)
+    # -------------------------------
+    # 2. Cargar configuración
+    # -------------------------------
+    with open(args.config, "r") as f:
+        config = yaml.safe_load(f)
 
-    # Load and preprocess
+    data_path = config.get("data_path", "data/winequality-red.csv")
+    test_size = config.get("test_size", 0.2)
+    random_state = config.get("random_state", 42)
+    model_type = config.get("model_type", "logistic_regression")
+    model_params = config.get("model_params", {})
+
+    # -------------------------------
+    # 3. Cargar y preparar los datos
+    # -------------------------------
     df = load_data(data_path)
-    X, y = preprocess(df)
-    X_train, X_test, y_train, y_test, scaler = split_and_scale(
+    X, y = preprocess_data(df)
+
+    X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state
     )
 
-    # Model hyperparams from config
-    model_cfg = cfg.get("model", {})
-    n_estimators = model_cfg.get("n_estimators", 100)
-    max_depth = model_cfg.get("max_depth", None)
+    # -------------------------------
+    # 4. Seleccionar modelo
+    # -------------------------------
+    if model_type == "logistic_regression":
+        model = LogisticRegression(**model_params)
+    elif model_type == "random_forest":
+        model = RandomForestClassifier(**model_params)
+    else:
+        raise ValueError(f"Modelo no soportado: {model_type}")
 
-    with mlflow.start_run() as run:
-        # Train
-        model = RandomForestClassifier(
-            n_estimators=n_estimators, max_depth=max_depth, random_state=random_state
-        )
-        model.fit(X_train, y_train)
+    # -------------------------------
+    # 5. Entrenamiento del modelo
+    # -------------------------------
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    score = accuracy_score(y_test, y_pred)
 
-        # Predict & Eval
-        preds = model.predict(X_test)
-        acc = accuracy_score(y_test, preds)
-        f1 = f1_score(y_test, preds)
+    # -------------------------------
+    # 6. Configurar MLflow
+    # -------------------------------
+    mlflow.set_tracking_uri("file:./mlruns")
+    mlflow.set_experiment("default")
 
-        # Log params & metrics
-        mlflow.log_param("n_estimators", n_estimators)
-        mlflow.log_param("max_depth", max_depth)
-        mlflow.log_metric("accuracy", float(acc))
-        mlflow.log_metric("f1", float(f1))
+    # -------------------------------
+    # 7. Registrar métricas y modelo
+    # -------------------------------
+    with mlflow.start_run():
+        mlflow.log_param("model_type", model_type)
+        mlflow.log_params(model_params)
+        mlflow.log_metric("accuracy", score)
+        mlflow.sklearn.log_model(model, "model")
 
-        # Signature & example input
-        import numpy as np
-        example_input = X_test[:2]
-        signature = infer_signature(X_train, model.predict(X_train))
+    print(f"✅ Entrenamiento completado con accuracy: {score:.4f}")
 
-        # Log model
-        mlflow.sklearn.log_model(
-            sk_model=model,
-            artifact_path="model",
-            signature=signature,
-            input_example=example_input
-        )
-
-        # Log scaler as artifact (optional)
-        import joblib
-        os.makedirs("artifacts", exist_ok=True)
-        scaler_path = os.path.join("artifacts", "scaler.joblib")
-        joblib.dump(scaler, scaler_path)
-        mlflow.log_artifact(scaler_path, artifact_path="preprocessing")
-
-        run_id = run.info.run_id
-        print(f"MLflow run_id: {run_id}")
-        print(f"MLflow tracking URI: {mlflow.get_tracking_uri()}")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config YAML")
-    args = parser.parse_args()
-    main(args.config)
+    main()
