@@ -10,16 +10,17 @@ on:
 jobs:
   ml_pipeline:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repo
+      - name: 🧩 Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
-      - name: Cache pip
+      - name: 💾 Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
@@ -27,47 +28,53 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies
+      - name: 📦 Install dependencies
         run: make install
 
-      - name: Lint
+      - name: 🔍 Lint code
         run: make lint
 
-      - name: Run tests
+      - name: 🧪 Run tests
+        env:
+          PYTHONPATH: .
         run: make test
 
-      - name: Train model
+      - name: 🧠 Train model
         env:
           MLFLOW_TRACKING_DIR: mlruns
         run: |
-          # ensure mlruns dir exists
+          echo "🏗️ Creating mlruns directory if not exists..."
           mkdir -p mlruns
+          echo "🚀 Starting training process..."
           make train
 
-      - name: List mlruns (for debug)
-        run: ls -la mlruns || true
+      - name: 📁 List mlruns (for debug)
+        run: |
+          echo "📂 Listing mlruns directory..."
+          ls -R mlruns || echo "⚠️ No mlruns directory found"
 
-      - name: Upload mlruns artifact
+      - name: 💾 Upload mlruns artifact
         uses: actions/upload-artifact@v4
         with:
           name: mlruns
           path: mlruns
 
-      - name: Upload model artifact (model logged by MLflow)
-        # The model is in mlruns/<experiment>/<run_id>/artifacts/model
+      - name: 📦 Package and upload model artifact
         run: |
-          # try to find the logged model
+          echo "🔍 Searching for logged MLflow model..."
           MODEL_PATH=$(find mlruns -type d -path "*/artifacts/model" -print -quit || true)
           echo "Found model path: $MODEL_PATH"
           if [ -n "$MODEL_PATH" ]; then
-            tar -czf model_artifact.tar.gz -C "$(dirname "$MODEL_PATH")" artifacts model || true
-            tar -czf model_artifact.tar.gz -C "$MODEL_PATH" .
-            echo "Uploading model_artifact.tar.gz"
-            ls -lah model_artifact.tar.gz || true
+            echo "📦 Packaging model into model_artifact.tar.gz..."
+            tar -czf model_artifact.tar.gz -C "$(dirname "$MODEL_PATH")" model
+            echo "✅ Model artifact created successfully!"
+            ls -lah model_artifact.tar.gz
           else
-            echo "No model artifacts found"
+            echo "⚠️ No model artifacts found, skipping packaging"
           fi
-      - name: Upload model tar (if exists)
+
+      - name: ☁️ Upload model tar (if exists)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: model_artifact
