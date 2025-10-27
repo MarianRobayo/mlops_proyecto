@@ -1,5 +1,5 @@
 import os
-from src.utils import load_data, preprocess
+from src.utils import load_data, preprocess_data as preprocess
 
 
 def test_load_and_preprocess():
