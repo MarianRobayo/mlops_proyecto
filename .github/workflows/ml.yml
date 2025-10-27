@@ -61,20 +61,20 @@ jobs:
 
       - name: 📦 Package and upload model artifact
         run: |
-          echo "🔍 Searching for logged MLflow model..."
-          MODEL_PATH=$(find mlruns -type d -path "*/artifacts/model" -print -quit || true)
-          echo "Found model path: $MODEL_PATH"
+          echo "🔍 Buscando modelo en mlruns..."
+          MODEL_PATH=$(find mlruns -type d -path "*/artifacts/model" -print -quit)
           if [ -n "$MODEL_PATH" ]; then
-            echo "📦 Packaging model into model_artifact.tar.gz..."
+            echo "✅ Modelo encontrado en: $MODEL_PATH"
             tar -czf model_artifact.tar.gz -C "$(dirname "$MODEL_PATH")" model
-            echo "✅ Model artifact created successfully!"
+            echo "📦 Archivo empaquetado:"
             ls -lah model_artifact.tar.gz
           else
-            echo "⚠️ No model artifacts found, skipping packaging"
+            echo "⚠️ No se encontró modelo. No se creará el tar.gz."
+            exit 0
           fi
 
-      - name: ☁️ Upload model tar (if exists)
-        if: always()
+      - name: ☁️ Upload model tar (only if exists)
+        if: hashFiles('model_artifact.tar.gz') != ''
         uses: actions/upload-artifact@v4
         with:
           name: model_artifact
